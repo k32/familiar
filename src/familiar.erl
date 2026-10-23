@@ -233,8 +233,6 @@ cluster_proxy_entrypoint(Parent, Conf0) ->
     {ok, Conf} ?= with_defaults(Conf0),
     #{id := ClusterId, auto_shutdown := AutoShutdown} = Conf,
     {ok, _} = application:ensure_all_started(familiar),
-    %% TODO: check if short names are used
-    ok = ensure_distr(#{}),
     {ok, Sup} = familiar_sup:start_cluster(Conf),
     link(Sup),
     proc_lib:init_ack(Parent, ok),

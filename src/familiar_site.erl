@@ -44,7 +44,7 @@
 %% node. Sites of several clusters booting at the same time can make a
 %% peer node hang during startup, which peer reports as a boot timeout;
 %% retrying after the failed attempt usually succeeds:
--define(PEER_START_ATTEMPTS, 4).
+-define(PEER_START_ATTEMPTS, 10).
 -define(PEER_START_DELAY, 1_000).
 
 -record(call_is_running, {}).

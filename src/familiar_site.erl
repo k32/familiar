@@ -86,7 +86,7 @@ is_running({ClusterId, SiteId}) ->
 -spec which_node(familiar:site()) -> node().
 which_node(Site) ->
   case call_method(Site) of
-    {erpc, Node} ->
+    {peer, _PeerPid, Node} ->
       Node
   end.
 
@@ -144,11 +144,15 @@ call(Site, Module, Function, Args) ->
 
 %% @doc Execute MFA on the site.
 %% Site must be running.
+%%
+%% The call goes over the TCP control connection of the peer node
+%% (see the @code{connection} key of the default peer options), so it
+%% requires the site to be started with an alternative connection.
 -spec call(familiar:site(), module(), atom(), list(), timeout()) -> _.
 call(Site, Module, Function, Args, Timeout) ->
   case call_method(Site) of
-    {erpc, Node} ->
-      erpc:call(Node, Module, Function, Args, Timeout)
+    {peer, PeerPid, _Node} ->
+      peer:call(PeerPid, Module, Function, Args, Timeout)
   end.
 
 -spec call(familiar:site(), fun(() -> Ret)) -> Ret.
@@ -157,11 +161,13 @@ call(SiteOrNode, Fun) ->
 
 %% @doc Execute `Fun' on the site.
 %% Site must be running.
+%%
+%% @code{peer:call} only supports MFA, so the fun is applied remotely.
 -spec call(familiar:site(), fun(() -> Ret), timeout()) -> Ret.
 call(Site, Fun, Timeout) ->
   case call_method(Site) of
-    {erpc, Node} ->
-      erpc:call(Node, Fun, Timeout)
+    {peer, PeerPid, _Node} ->
+      peer:call(PeerPid, erlang, apply, [Fun, []], Timeout)
   end.
 
 %%================================================================================
@@ -340,7 +346,7 @@ do_start(CustomSpec, S0) ->
           , node = Node
           , last_node = {ok, Node}
           },
-  persistent_term:put(?call_via(Cluster, Site), {erpc, Node}),
+  persistent_term:put(?call_via(Cluster, Site), {peer, Pid, Node}),
   case familiar_fixture:init_per_node(Fixtures, {Cluster, Site}, Node, FS) of
     {ok, NFS} ->
       {ok, Node, S#s{node_fixture_state = NFS}};

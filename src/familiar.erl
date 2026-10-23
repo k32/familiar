@@ -352,6 +352,13 @@ default_peer_opts() ->
      %% default 15 s timeout plus a retry doesn't fit into a typical
      %% test case timeout.
    , wait_boot => 5_000
+     %% Use a TCP control connection instead of the distribution for
+     %% the boot handshake and for the RPC of familiar_site:call/3..5:
+     %% with the default distribution-based channel, booting sites of
+     %% several clusters at the same time can make the boot hang, and
+     %% every call from the manager sets up a distribution connection
+     %% to the site.
+   , connection => 0
    }.
 
 verify_peer(Conf) ->

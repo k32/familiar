@@ -32,12 +32,20 @@
 -export_type([start_options/0]).
 
 -include("familiar_internal.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%================================================================================
 %% Type declarations
 %%================================================================================
 
 -define(call_via(CLUSTER, SITE), {?MODULE, CLUSTER, SITE}).
+
+%% Number of attempts and the delay between them for starting the peer
+%% node. Sites of several clusters booting at the same time can make a
+%% peer node hang during startup, which peer reports as a boot timeout;
+%% retrying after the failed attempt usually succeeds:
+-define(PEER_START_ATTEMPTS, 4).
+-define(PEER_START_DELAY, 1_000).
 
 -record(call_is_running, {}).
 -record(call_start, {opts :: map()}).
@@ -274,6 +282,31 @@ terminate(_Reason, _) ->
 %% Internal functions
 %%================================================================================
 
+%% Start the peer node of the site, retrying when the boot fails or
+%% times out: see the ?PEER_START_ATTEMPTS comment. The last attempt
+%% propagates the failure of peer:start_link unchanged.
+start_peer(PeerOpts) ->
+  start_peer(PeerOpts, ?PEER_START_ATTEMPTS).
+
+start_peer(PeerOpts, 1) ->
+  peer:start_link(PeerOpts);
+start_peer(PeerOpts, Attempts) ->
+  try peer:start_link(PeerOpts) of
+    {ok, Pid, Node} ->
+      {ok, Pid, Node};
+    {error, _} = Error ->
+      peer_start_retry(PeerOpts, Attempts, Error)
+  catch
+    Class:Reason ->
+      peer_start_retry(PeerOpts, Attempts, {Class, Reason})
+  end.
+
+peer_start_retry(PeerOpts, Attempts, Error) ->
+  ?LOG_WARNING("Peer start failed with ~0p, ~b attempts left",
+               [Error, Attempts - 1]),
+  timer:sleep(?PEER_START_DELAY),
+  start_peer(PeerOpts, Attempts - 1).
+
 do_start(CustomSpec, S0) ->
   #s{ cluster = Cluster
     , site = Site
@@ -302,7 +335,7 @@ do_start(CustomSpec, S0) ->
        , peer => PeerOpts
        , listen_addr => ListenAddr
        }),
-  {ok, Pid, Node} = peer:start_link(PeerOpts),
+  {ok, Pid, Node} = start_peer(PeerOpts),
   S = S0#s{ pid = Pid
           , node = Node
           , last_node = {ok, Node}

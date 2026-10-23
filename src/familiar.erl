@@ -348,6 +348,10 @@ default_peer_opts() ->
    , peer_down => stop
    , shutdown => {halt, 4_000}
    , args => ["+S", "1:1"]
+     %% Fail fast so that `familiar_site' can retry the boot: the
+     %% default 15 s timeout plus a retry doesn't fit into a typical
+     %% test case timeout.
+   , wait_boot => 5_000
    }.
 
 verify_peer(Conf) ->

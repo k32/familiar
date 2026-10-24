@@ -25,10 +25,13 @@
 %%================================================================================
 
 %% @private
-init_per_node(_Site, Node, _Conf, State) ->
-  {ok, _} = cover:start([Node]),
-  {ok, State}.
+init_per_node(Site, Node, _Conf, #{workdir := WD} = State) ->
+  familiar:call(Site, cover, start, []),
+  File = filename:join([WD, "cover_data", integer_to_list(erlang:monotonic_time())]),
+  ok = filelib:ensure_dir(File),
+  {ok, State#{cover_file => File}}.
 
 %% @private
-cleanup_per_node(_Site, Node, _Conf, _State, _IsKill) ->
-  cover:stop([Node]).
+cleanup_per_node(Site, _Node, _Conf, #{cover_file := File}, _IsKill) ->
+  ok = familiar:call(Site, cover, export, [File]),
+  ok = cover:import(File).

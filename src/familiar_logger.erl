@@ -2,15 +2,18 @@
 %% copyright (c) 2026 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%--------------------------------------------------------------------
 
-%% @doc Test fixture that configures logger.
-%%
-%% It must run after `familiar_workdir'
 -module(familiar_logger).
+-moduledoc """
+Test fixture that configures logger.
+
+It must run after `familiar_workdir'
+""".
 
 -behavior(familiar_fixture).
 
 %% behavior callbacks:
 -export([init_per_cluster/3, init_per_node/4, cleanup_per_node/5]).
+-export([tag_node/2]).
 
 -export_type([conf/0]).
 
@@ -23,37 +26,54 @@
 -type conf() :: #{ level          => _
                  , primary_config => logger:primary_config()
                  , handler_config => _
+                 , tag_logs       => boolean()
+                 , tags           => map()
                  }.
 
 %%================================================================================
 %% behavior callbacks
 %%================================================================================
 
-%% @private
+-doc false.
 init_per_cluster(_Cluster, Conf, State = #{workdir := _}) ->
   LogLevel = level(Conf),
   {ok, State#{log_level => LogLevel}};
 init_per_cluster(_Cluster, _Conf, _State) ->
   error(logger_needs_work_dir).
 
-%% @private
-init_per_node(Site, _Node, Conf, State) ->
+-doc false.
+init_per_node(Site = {ClusterId, SiteId}, _Node, Conf, State) ->
   #{workdir := _WorkDir, log_level := Level} = State,
   LogFile = "erlang.log",
   Handler = ?MODULE,
   ?ON(Site,
       begin
         ok = logger:set_primary_config(primary_config(Level, Conf)),
-        ok = logger:add_handler(Handler, logger_std_h, handler_config(LogFile, Conf))
+        ok = logger:add_handler(Handler, logger_std_h, handler_config(LogFile, Conf)),
+        %% Tag logs with cluster and site IDs:
+        maps:get(tag_logs, Conf, true) andalso
+          begin
+            CustomTags = maps:get(tags, Conf, #{}),
+            Filter = {fun ?MODULE:tag_node/2, CustomTags#{cluster => ClusterId, site => SiteId}},
+            ok = logger:add_primary_filter(?MODULE, Filter)
+          end
       end),
   {ok, State#{log_file => LogFile, log_handler => Handler}}.
 
-%% @private
+-doc false.
 cleanup_per_node(Site, _Node, _Conf, #{log_handler := Handler}, _IsKill) ->
   ?ON(Site,
       begin
         ok = logger_std_h:filesync(Handler)
       end).
+
+-doc false.
+tag_node(Event = #{meta := Meta}, Ids) ->
+  Event#{meta => maps:merge(Ids, Meta)}.
+
+%%================================================================================
+%% Internal functions
+%%================================================================================
 
 primary_config(Level, Conf) ->
   Default =

@@ -75,7 +75,7 @@ cleanup_per_cluster(_ClusterId, _Conf, Success, #{workdir := WD}) ->
             end,
   case DoClean of
     true ->
-      logger:notice("Cleaning up working directory ~s", [WD]),
+      logger:info("Cleaning up working directory ~s", [WD]),
       file:del_dir_r(WD);
     false ->
       logger:notice("Keeping working directory ~s", [WD]),
